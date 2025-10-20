@@ -1,0 +1,40 @@
+name: Branch Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  enforce-merge-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check allowed merge paths
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo "Checking PR from '$PR_HEAD' → '$PR_BASE'"
+          allowed=0
+
+          # Allow feature → devel
+          if [ "$PR_BASE" = "devel" ]; then
+            case "$PR_HEAD" in
+              feat/*|feature/*|bugfix/*|hotfix/*|chore/*|refactor/*) allowed=1 ;;
+            esac
+          fi
+
+          # Allow devel → stage
+          if [ "$PR_BASE" = "stage" ] && [ "$PR_HEAD" = "devel" ]; then
+            allowed=1
+          fi
+
+          # Allow stage → prod
+          if [ "$PR_BASE" = "prod" ] && [ "$PR_HEAD" = "stage" ]; then
+            allowed=1
+          fi
+
+          if [ $allowed -ne 1 ]; then
+            echo "::error::❌ Disallowed merge path: '$PR_HEAD' → '$PR_BASE'"
+            echo "Allowed: feature/*→devel, devel→stage, stage→prod"
+            exit 1
+          fi
