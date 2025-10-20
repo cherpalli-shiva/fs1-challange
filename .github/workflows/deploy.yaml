@@ -1,0 +1,48 @@
+name: CD Pipeline (Terraform Deploy)
+
+on:
+  push:
+    branches:
+      - devel
+      - stage
+      - prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Select environment tfvars based on branch
+        id: select-env
+        run: |
+          branch="${GITHUB_REF##*/}"
+          if [ "$branch" = "devel" ]; then
+            echo "tfvars=env/devel.tfvars" >> $GITHUB_OUTPUT
+          elif [ "$branch" = "stage" ]; then
+            echo "tfvars=env/stage.tfvars" >> $GITHUB_OUTPUT
+          elif [ "$branch" = "prod" ]; then
+            echo "tfvars=env/prod.tfvars" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve -var-file="${{ steps.select-env.outputs.tfvars }}"
